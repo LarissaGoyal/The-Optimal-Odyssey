@@ -4,62 +4,79 @@
 #include<algorithm>
 #include "json.hpp"
 #include<chrono>
+#include <queue>
+#include <map>
+#include <vector>
+#include <cmath>
+#include "graph.hpp"
 using namespace std;
-struct Node{
-    int y,x;
-};
-
-class Graph {
-    public:
-    int rows,cols;
-    vector<vector<bool> >obstacle;
-    Graph(nlohmann::json data){
-        rows= data["grid_size"]["rows"];
-        cols= data["grid_size"]["cols"];
-        obstacle.assign(rows, vector<bool>(cols,false));
-        for(auto x: data["obstacles"]){
-            obstacle[x["y"]][x["x"]]=true;
-        }
-    }
-    vector<Node> get_neighbors(Node current){
-        vector<Node>neighbors(4);
-        neighbors[0]={current.y+1,current.x};
-        neighbors[1]={current.y-1,current.x};
-        neighbors[2]={current.y,current.x+1};
-        neighbors[3]={current.y,current.x-1};
-
-        vector<Node>correct_neighbors;
-        for(int i=0; i<4; i++){
-            int y=neighbors[i].y;
-            int x=neighbors[i].x;
-            if(y>=0 && x>=0 && y<rows && x<cols && !obstacle[y][x]){
-                correct_neighbors.push_back(neighbors[i]);
-            }
-        }
-        return correct_neighbors;
-    }
-};
 
 struct Result{
     bool path_found;
     int path_length;
-    int nodes_explores;
+    int nodes_explored;
     double time_ms;
+    Result(){
+        path_found=false;
+        path_length=0;
+        nodes_explored=0;
+        time_ms=0;
+    }
 };
 
 double dijkstra_h(Node a, Node b){
     return 0;
 }
 double astar_euclidean_h(Node a, Node b){
-    return sqrt((a.y-b.y)^2 + (a.x-b.x)^2);
+    return sqrt((a.y-b.y)*(a.y-b.y) + (a.x-b.x)*(a.x-b.x));
 }
-double astar_manhattan(Node a, Node b){
+double astar_manhattan_h(Node a, Node b){
     return abs(a.x-b.x)+abs(a.y-b.y);
 }
 
 Result search(Graph& g, Node start, Node end, double (*h)(Node,Node)){
+    auto start_t=chrono::high_resolution_clock::now();
     Result result;
+    map<Node,Node>parent;
+    map<Node,int>distance;
+    priority_queue<pair<double,Node> >q;
+    parent[start]=start;
+    distance[start]=0;
+    q.push({0,start});
+    
+    while(!q.empty()){
+        Node current=q.top().second;
+        q.pop();
+        if(current==end){
+            result.path_found=true;
+            break;
+        }
 
+        for(auto next: g.get_neighbors(current)){
+            int new_distance= distance[current]+1;
+            
+            if(distance.count(next)==0 || distance[next]>new_distance){
+                if(distance.count(next)==0)
+                    result.nodes_explored++;
+                distance[next]=new_distance;
+                double priority=-(new_distance+h(next,end));
+                q.push({priority,next});
+                parent[next]=current;
+            }
+        }
+    }
+
+    if(result.path_found){
+        Node curr=end;
+        while(!(parent[curr]==curr)){
+            result.path_length++;
+            curr=parent[curr];
+        }
+    }
+
+    auto end_t=chrono::high_resolution_clock::now();
+    chrono::duration<double, milli> duration = end_t - start_t;
+    result.time_ms = duration.count();
     return result;
 }
 
@@ -117,6 +134,31 @@ int main(int argc, char* argv[]){
             Node end = {event["goal"]["y"],event["goal"]["x"]};
 
             Result dijkstra_result=search(map,start,end,dijkstra_h);
+            Result astar_euclidean_result=search(map,start,end,astar_euclidean_h);
+            Result astar_manhattan_result=search(map,start,end,astar_manhattan_h);
+
+            nlohmann::json out;
+            out["id"] = event["id"];
+            out["dijkstra"] = {
+                {"path_found", dijkstra_result.path_found},
+                {"path_length", dijkstra_result.path_length},
+                {"nodes_explored", dijkstra_result.nodes_explored},
+                {"time_ms", dijkstra_result.time_ms}
+            };
+            out["astar_euclidean"] = {
+                {"path_found", astar_euclidean_result.path_found},
+                {"path_length", astar_euclidean_result.path_length},
+                {"nodes_explored", astar_euclidean_result.nodes_explored},
+                {"time_ms", astar_euclidean_result.time_ms}
+            };
+            out["astar_manhattan"] = {
+                {"path_found", astar_manhattan_result.path_found},
+                {"path_length", astar_manhattan_result.path_length},
+                {"nodes_explored", astar_manhattan_result.nodes_explored},
+                {"time_ms", astar_manhattan_result.time_ms}
+            };
+
+            output_json["results"].push_back(out);
         }
 		/* Refer to the sample code below */
         /*
@@ -131,6 +173,8 @@ int main(int argc, char* argv[]){
         }
         */
     }
-
+    std::ofstream out_file(output_file);
+    out_file << output_json.dump(4);  
+    out_file.close();
     return 0;
 }
