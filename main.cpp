@@ -40,7 +40,28 @@ class Graph {
     }
 };
 
+struct Result{
+    bool path_found;
+    int path_length;
+    int nodes_explores;
+    double time_ms;
+};
 
+double dijkstra_h(Node a, Node b){
+    return 0;
+}
+double astar_euclidean_h(Node a, Node b){
+    return sqrt((a.y-b.y)^2 + (a.x-b.x)^2);
+}
+double astar_manhattan(Node a, Node b){
+    return abs(a.x-b.x)+abs(a.y-b.y);
+}
+
+Result search(Graph& g, Node start, Node end, double (*h)(Node,Node)){
+    Result result;
+
+    return result;
+}
 
 int main(int argc, char* argv[]){
 
@@ -91,7 +112,12 @@ int main(int argc, char* argv[]){
     for(auto event : query_json["events"]){
 
         type = event["type"];
+        if(type=="find_path"){
+            Node start = {event["start"]["y"],event["start"]["x"]};
+            Node end = {event["goal"]["y"],event["goal"]["x"]};
 
+            Result dijkstra_result=search(map,start,end,dijkstra_h);
+        }
 		/* Refer to the sample code below */
         /*
         if(type == "remove_edge") {
